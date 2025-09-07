@@ -13,9 +13,7 @@ print(llm("what is the capital of France?"))
 """
 
 from fastapi import FastAPI
-from dotenv import load_dotenv
 
-load_dotenv(".env")
 
 from routes import base
 
