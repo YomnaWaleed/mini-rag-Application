@@ -50,6 +50,11 @@ $ cp .env.example .env
 
 - update `.env` with your credentials
 
+```
+$ cd docker 
+$ sudo docker compose up -d 
+```
+
 ## run the FastAPI server 
 
 ```bash
