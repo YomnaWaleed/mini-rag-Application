@@ -4,6 +4,10 @@ from fastapi import UploadFile
 from models import ResponseSignal
 import re
 import os
+from bson import ObjectId
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 
 class DataController(BaseController):
@@ -48,3 +52,26 @@ class DataController(BaseController):
         cleaned_file_name = cleaned_file_name.replace(" ", "_")
 
         return cleaned_file_name
+
+    def delete_all_pdfs_from_project_folder(self, project_id: str):
+        """
+        Delete all .pdf files from the project folder.
+        Returns list of deleted filenames.
+        """
+        project_path = ProjectController().get_project_path(project_id=project_id)
+
+        if not os.path.exists(project_path):
+            return []
+
+        deleted_files = []
+        for filename in os.listdir(project_path):
+            if filename.lower().endswith(".pdf"):
+                file_path = os.path.join(project_path, filename)
+                try:
+                    os.remove(file_path)
+                    deleted_files.append(filename)
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_path}: {e}")
+                    continue
+
+        return deleted_files

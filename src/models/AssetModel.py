@@ -62,3 +62,11 @@ class AssetModel(BaseDataModel):
         if record:
             return Asset(**record)
         return None
+
+    async def delete_assets_by_ids(self, ids: list):
+        """
+        ids: list of ObjectId or str
+        """
+        object_ids = [ObjectId(i) if not isinstance(i, ObjectId) else i for i in ids]
+        result = await self.collection.delete_many({"_id": {"$in": object_ids}})
+        return result.deleted_count

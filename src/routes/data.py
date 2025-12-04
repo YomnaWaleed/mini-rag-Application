@@ -12,6 +12,8 @@ from models.ChunkModel import ChunkModel
 from models.AssetModel import AssetModel
 from models.db_schemes import DataChunk, Asset
 from models.enums.AssetTypeEnum import AssetTypeEnum
+from bson import ObjectId
+
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -171,5 +173,79 @@ async def process_endpoint(
             "signal": ResponseSignal.PROCESSING_SUCCESS.value,
             "inserted_chunks": no_records,
             "processed_files": no_files,
+        }
+    )
+
+
+@data_router.delete("/delete-pdfs/{project_id}")
+async def delete_pdfs_endpoint(request: Request, project_id: str):
+    """
+    Delete all PDF files for a given project:
+    - remove files from folder
+    - remove asset records for those files
+    - remove chunks that belong to those assets
+    """
+    project_model = await ProjectModel.create_instance(db_client=request.app.db_client)
+    asset_model = await AssetModel.create_instance(db_client=request.app.db_client)
+    chunk_model = await ChunkModel.create_instance(db_client=request.app.db_client)
+
+    # ensure project exists
+    project = await project_model.get_project_or_create_one(project_id=project_id)
+    if not project:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"signal": ResponseSignal.PROJECT_NOT_FOUND_ERROR.value},
+        )
+
+    data_controller = DataController()
+
+    # 1) physically delete PDF files and get list of deleted filenames
+    deleted_filenames = data_controller.delete_all_pdfs_from_project_folder(
+        project_id=project_id
+    )
+
+    if not deleted_filenames:
+        # nothing to delete (no pdfs)
+        return JSONResponse(
+            content={
+                "signal": "no_pdfs_found",
+                "deleted_files_count": 0,
+                "deleted_files": [],
+            }
+        )
+
+    # 2) get asset records for these filenames
+    # fetch all file assets for the project, then filter by name in deleted_filenames
+    project_files = await asset_model.get_all_project_assets(
+        asset_project_id=project.id, asset_type=AssetTypeEnum.FILE.value
+    )
+
+    # find asset ids that match deleted filenames
+    asset_ids_to_delete = []
+    for rec in project_files:
+        if rec.asset_name in deleted_filenames:
+            asset_ids_to_delete.append(rec.id)
+
+    # 3) delete chunks that reference these asset ids
+    deleted_chunks_count = 0
+    if len(asset_ids_to_delete) > 0:
+        deleted_chunks_count = await chunk_model.delete_chunks_by_asset_ids(
+            asset_ids=asset_ids_to_delete
+        )
+
+    # 4) delete asset records by ids
+    deleted_assets_count = 0
+    if len(asset_ids_to_delete) > 0:
+        deleted_assets_count = await asset_model.delete_assets_by_ids(
+            ids=asset_ids_to_delete
+        )
+
+    return JSONResponse(
+        content={
+            "signal": "delete_pdfs_success",
+            "deleted_files_count": len(deleted_filenames),
+            "deleted_files": deleted_filenames,
+            "deleted_assets_count": deleted_assets_count,
+            "deleted_chunks_count": deleted_chunks_count,
         }
     )

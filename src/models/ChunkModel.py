@@ -73,3 +73,12 @@ class ChunkModel(BaseDataModel):
         )
 
         return [DataChunk(**record) for record in records]
+
+    async def delete_chunks_by_asset_ids(self, asset_ids: list):
+        object_ids = [
+            ObjectId(a) if not isinstance(a, ObjectId) else a for a in asset_ids
+        ]
+        result = await self.collection.delete_many(
+            {"chunk_asset_id": {"$in": object_ids}}
+        )
+        return result.deleted_count
